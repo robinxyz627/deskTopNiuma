@@ -12,15 +12,21 @@
   "app": {
     "windows": [
       {
-        "title": "牛马工资计算器",
+        "title": "Pet",
         "label": "main",
-        "width": 220,
-        "height": 420,
+        "width": 500,
+        "height": 500,
+        "minWidth": 500,
+        "minHeight": 500,
+        "maxWidth": 500,
+        "maxHeight": 500,
         "resizable": false,
         "decorations": false,
         "transparent": true,
+        "shadow": false,
         "alwaysOnTop": true,
-        "skipTaskbar": false,
+        "skipTaskbar": true,
+        "visible": false,
         "center": false,
         "x": 100,
         "y": 100

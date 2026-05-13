@@ -1,27 +1,29 @@
 <template>
-  <div class="app-container" @mousedown="handleDragStart">
-    <!-- 标题栏 -->
-    <div class="title-bar" @mousedown="handleDragStart">
-      <span class="title-text">🐂 牛马计算器</span>
-      <div class="title-buttons">
-        <button class="title-btn" @click.stop="handleMinimize" title="最小化">─</button>
-        <button class="title-btn close" @click.stop="handleClose" title="关闭">✕</button>
-      </div>
-    </div>
+  <div class="app-container">
+    <!-- 牛牛头像 -->
+    <PetAvatar 
+      @dblclick="toggleMenu" 
+    />
 
-    <!-- 宠物形象 -->
-    <PetAvatar />
+    <!-- 径向菜单 -->
+    <RadialMenu
+      v-if="showMenu"
+      :x="250"
+      :y="250"
+      @close="showMenu = false"
+      @select="handleMenuSelect"
+    />
 
-    <!-- 工资显示 -->
-    <WageDisplay />
+    <!-- 侧边面板 -->
+    <SidePanel
+      v-if="showPanel"
+      :type="panelType"
+      :menuIndex="selectedMenuIndex"
+      @close="showPanel = false"
+    />
 
-    <!-- 控制面板 -->
-    <ControlPanel />
-
-    <!-- 设置面板弹窗 -->
+    <!-- 弹窗 -->
     <SettingsPanel v-if="showSettings" @close="showSettings = false" />
-
-    <!-- 日报表弹窗 -->
     <DailyReport v-if="showReport" :session="reportSession" @close="showReport = false" />
   </div>
 </template>
@@ -29,128 +31,74 @@
 <script setup lang="ts">
 import { ref, provide } from 'vue'
 import PetAvatar from './components/PetAvatar.vue'
-import WageDisplay from './components/WageDisplay.vue'
-import ControlPanel from './components/ControlPanel.vue'
+import RadialMenu from './components/RadialMenu.vue'
+import SidePanel from './components/SidePanel.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
 import DailyReport from './components/DailyReport.vue'
 import type { WorkSession } from './types'
 
+const showMenu = ref(false)
+const showPanel = ref(false)
+const panelType = ref<'wage' | 'control' | null>(null)
 const showSettings = ref(false)
 const showReport = ref(false)
 const reportSession = ref<WorkSession | null>(null)
+const selectedMenuIndex = ref(0)
 
-// 暴露给子组件的方法
-function openSettings() {
-  showSettings.value = true
-}
-
-function openReport(session: WorkSession) {
-  reportSession.value = session
-  showReport.value = true
-}
-
-// 窗口拖动
-async function handleDragStart(e: MouseEvent) {
-  // 只响应左键
-  if (e.button !== 0) return
-  // 排除按钮点击
-  if ((e.target as HTMLElement).closest('button')) return
-  
-  try {
-    const { getCurrentWindow } = await import('@tauri-apps/api/window')
-    await getCurrentWindow().startDragging()
-  } catch (err) {
-    console.error('拖动失败:', err)
+// 切换菜单（固定窗口大小，只切换菜单显示）
+function toggleMenu() {
+  if (showMenu.value) {
+    showMenu.value = false
+    showPanel.value = false
+  } else {
+    showMenu.value = true
   }
 }
 
-// 窗口控制
-async function handleMinimize() {
-  try {
-    const { getCurrentWindow } = await import('@tauri-apps/api/window')
-    await getCurrentWindow().minimize()
-  } catch (err) {
-    console.error('最小化失败:', err)
+// 菜单选择
+function handleMenuSelect(action: string) {
+  const actionToIndex: Record<string, number> = {
+    'clockin': 0,
+    'slacking': 1,
+    'wage': 2,
+    'pong': 3,
+    'settings': 4,
+    'report': 5,
+  }
+  selectedMenuIndex.value = actionToIndex[action] ?? 0
+
+  switch (action) {
+    case 'clockin':
+    case 'slacking':
+      panelType.value = 'control'
+      showPanel.value = true
+      break
+    case 'wage':
+      panelType.value = 'wage'
+      showPanel.value = true
+      break
+    case 'pong':
+      showMenu.value = false
+      break
+    case 'settings':
+      showSettings.value = true
+      showMenu.value = false
+      break
+    case 'report':
+      showMenu.value = false
+      break
   }
 }
 
-async function handleClose() {
-  try {
-    const { getCurrentWindow } = await import('@tauri-apps/api/window')
-    await getCurrentWindow().close()
-  } catch (err) {
-    console.error('关闭失败:', err)
-  }
-}
-
-provide('openSettings', openSettings)
-provide('openReport', openReport)
+provide('openSettings', () => showSettings.value = true)
+provide('openReport', (s: WorkSession) => { reportSession.value = s; showReport.value = true })
 </script>
 
 <style scoped>
 .app-container {
   width: 100%;
   height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 8px;
-  gap: 6px;
-  background: var(--bg-primary);
-  border-radius: var(--radius);
-  border: 1px solid var(--border-color);
-  box-shadow: var(--shadow);
-  backdrop-filter: blur(20px);
-  overflow: hidden;
-}
-
-.title-bar {
-  width: 100%;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 4px 8px;
-  cursor: grab;
-}
-
-.title-bar:active {
-  cursor: grabbing;
-}
-
-.title-text {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--accent-blue);
-  pointer-events: none;
-}
-
-.title-buttons {
-  display: flex;
-  gap: 4px;
-}
-
-.title-btn {
-  width: 20px;
-  height: 20px;
-  border: none;
-  border-radius: 4px;
+  position: relative;
   background: transparent;
-  color: var(--text-secondary);
-  font-size: 12px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.2s;
-}
-
-.title-btn:hover {
-  background: var(--bg-button);
-  color: var(--text-primary);
-}
-
-.title-btn.close:hover {
-  background: var(--accent-red);
-  color: white;
 }
 </style>
