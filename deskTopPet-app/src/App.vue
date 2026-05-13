@@ -1,8 +1,8 @@
 <template>
   <div class="app-container">
     <!-- 牛牛头像 -->
-    <PetAvatar 
-      @dblclick="toggleMenu" 
+    <PetAvatar
+      @dblclick="toggleMenu"
     />
 
     <!-- 径向菜单 -->
@@ -22,6 +22,9 @@
       @close="showPanel = false"
     />
 
+    <!-- 弹球游戏 -->
+    <PongGameWrapper v-if="showPongGame" @close="showPongGame = false" />
+
     <!-- 弹窗 -->
     <SettingsPanel v-if="showSettings" @close="showSettings = false" />
     <DailyReport v-if="showReport" :session="reportSession" @close="showReport = false" />
@@ -29,23 +32,64 @@
 </template>
 
 <script setup lang="ts">
-import { ref, provide } from 'vue'
+import { ref, provide, watch, onMounted } from 'vue'
 import PetAvatar from './components/PetAvatar.vue'
 import RadialMenu from './components/RadialMenu.vue'
 import SidePanel from './components/SidePanel.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
 import DailyReport from './components/DailyReport.vue'
+import PongGameWrapper from './components/PongGameWrapper.vue'
 import type { WorkSession } from './types'
+import {
+  updateBackendAlphaMask,
+  getDefaultElements,
+  getMenuElements,
+  getPanelElements,
+  getFullscreenElements
+} from './utils/alphaMask'
 
 const showMenu = ref(false)
 const showPanel = ref(false)
 const panelType = ref<'wage' | 'control' | null>(null)
 const showSettings = ref(false)
 const showReport = ref(false)
+const showPongGame = ref(false)
 const reportSession = ref<WorkSession | null>(null)
 const selectedMenuIndex = ref(0)
 
-// 切换菜单（固定窗口大小，只切换菜单显示）
+// 更新透明遮罩
+function updateAlphaMask() {
+  let elements
+
+  if (showSettings.value || showReport.value || showPongGame.value) {
+    // 全屏弹窗：整个窗口可点击
+    elements = getFullscreenElements()
+  } else if (showPanel.value) {
+    // 侧边面板展开
+    elements = getPanelElements(selectedMenuIndex.value)
+  } else if (showMenu.value) {
+    // 菜单展开
+    elements = getMenuElements()
+  } else {
+    // 只有牛牛
+    elements = getDefaultElements()
+  }
+
+  updateBackendAlphaMask(elements).catch(console.error)
+}
+
+// 监听 UI 变化，更新遮罩
+watch([showMenu, showPanel, showSettings, showReport, showPongGame, selectedMenuIndex], () => {
+  updateAlphaMask()
+})
+
+// 初始化时更新遮罩
+onMounted(() => {
+  // 延迟一下，确保后端线程已启动
+  setTimeout(updateAlphaMask, 600)
+})
+
+// 切换菜单
 function toggleMenu() {
   if (showMenu.value) {
     showMenu.value = false
@@ -78,6 +122,7 @@ function handleMenuSelect(action: string) {
       showPanel.value = true
       break
     case 'pong':
+      showPongGame.value = true
       showMenu.value = false
       break
     case 'settings':
