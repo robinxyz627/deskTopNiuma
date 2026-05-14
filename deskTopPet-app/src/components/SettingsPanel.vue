@@ -1,63 +1,43 @@
 <template>
-  <div class="settings-overlay" @click.self="$emit('close')">
-    <div class="settings-panel">
-      <div class="panel-header">
-        <h3>⚙️ 设置</h3>
-        <button class="close-btn" @click="$emit('close')">✕</button>
+  <div class="settings-panel" :style="panelStyle" :class="{ 'is-dragging': isDragging }">
+    <!-- 拖拽手柄 -->
+    <div class="panel-header" @mousedown="onHeaderMouseDown">
+      <h3>⚙️ 设置</h3>
+      <button class="close-btn" @click="$emit('close')">✕</button>
+    </div>
+
+    <div class="panel-body">
+      <!-- 日薪设置 -->
+      <div class="setting-row">
+        <label>日薪</label>
+        <input type="number" v-model.number="form.dailyIncome" min="0" step="10" class="setting-input" />
       </div>
 
-      <div class="panel-body">
-        <!-- 日薪设置 -->
-        <div class="setting-item">
-          <label>日薪（元）</label>
-          <input 
-            type="number" 
-            v-model.number="form.dailyIncome" 
-            min="0" 
-            step="10"
-            class="setting-input"
-          />
-        </div>
-
-        <!-- 工作时长 -->
-        <div class="setting-item">
-          <label>工作时长（小时）</label>
-          <input 
-            type="number" 
-            v-model.number="form.workHoursPerDay" 
-            min="1" 
-            max="24"
-            step="0.5"
-            class="setting-input"
-          />
-        </div>
-
-        <!-- 每小时工资预览 -->
-        <div class="preview-info">
-          <span>每小时工资：</span>
-          <span class="preview-value">¥ {{ hourlyWagePreview }}</span>
-        </div>
-        <div class="preview-info">
-          <span>正常分均收入：</span>
-          <span class="preview-value">¥ {{ normalMinuteRate }}</span>
-        </div>
-
-        <!-- 宠物形象 -->
-        <div class="setting-item">
-          <label>宠物形象</label>
-          <button class="btn-change-image" @click="changeImage">
-            {{ form.petImagePath ? '更换图片' : '选择图片' }}
-          </button>
-          <div v-if="form.petImagePath" class="image-preview">
-            <img :src="form.petImagePath" @error="form.petImagePath = ''" />
-            <button class="btn-remove-image" @click="form.petImagePath = ''">✕</button>
-          </div>
-        </div>
+      <!-- 工作时长 -->
+      <div class="setting-row">
+        <label>工时</label>
+        <input type="number" v-model.number="form.workHoursPerDay" min="1" max="24" step="0.5" class="setting-input" />
       </div>
 
-      <div class="panel-footer">
-        <button class="btn-save" @click="handleSave">保存</button>
+      <!-- 预览 -->
+      <div class="preview-row">
+        <span>时薪 <b>¥{{ hourlyWagePreview }}</b></span>
+        <span>分均 <b>¥{{ normalMinuteRate }}</b></span>
       </div>
+
+      <!-- 宠物形象 -->
+      <div class="setting-row">
+        <label>宠物</label>
+        <button class="btn-image" @click="changeImage">
+          {{ form.petImagePath ? '换图' : '选图' }}
+        </button>
+        <img v-if="form.petImagePath" :src="form.petImagePath" class="pet-preview" @error="form.petImagePath = ''" />
+        <button v-if="form.petImagePath" class="btn-remove" @click="form.petImagePath = ''">✕</button>
+      </div>
+    </div>
+
+    <div class="panel-footer">
+      <button class="btn-save" @click="handleSave">保存</button>
     </div>
   </div>
 </template>
@@ -67,6 +47,7 @@ import { reactive, computed } from 'vue'
 import { useSettings } from '@/composables/useSettings'
 import { selectImage } from '@/composables/useTauri'
 import { useWageStore } from '@/stores/wageStore'
+import { useDraggable } from '@/composables/useDraggable'
 
 const emit = defineEmits(['close'])
 const { settings, saveSettings } = useSettings()
@@ -78,24 +59,22 @@ const form = reactive({
   petImagePath: settings.value.petImagePath
 })
 
-const hourlyWagePreview = computed(() => {
-  return (form.dailyIncome / form.workHoursPerDay).toFixed(2)
-})
+const hourlyWagePreview = computed(() => (form.dailyIncome / form.workHoursPerDay).toFixed(2))
+const normalMinuteRate = computed(() => (form.dailyIncome / form.workHoursPerDay / 60).toFixed(4))
 
-const normalMinuteRate = computed(() => {
-  return (form.dailyIncome / form.workHoursPerDay / 60).toFixed(4)
-})
+const { x, y, isDragging, onHeaderMouseDown } = useDraggable(250, 180)
+const panelStyle = computed(() => ({
+  left: `${x.value}px`,
+  top: `${y.value}px`,
+}))
 
 async function changeImage() {
   const result = await selectImage()
-  if (result) {
-    form.petImagePath = result
-  }
+  if (result) form.petImagePath = result
 }
 
 function handleSave() {
   saveSettings({ ...form })
-  // 同步更新 wageStore
   wageStore.dailyIncome = form.dailyIncome
   wageStore.workHoursPerDay = form.workHoursPerDay
   emit('close')
@@ -103,175 +82,157 @@ function handleSave() {
 </script>
 
 <style scoped>
-.settings-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.settings-panel {
+  position: absolute;
+  width: 200px;
+  background: rgba(25, 25, 35, 0.85);
+  backdrop-filter: blur(8px);
+  border-radius: 10px;
+  border: 1px solid rgba(137, 180, 250, 0.25);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
   z-index: 100;
-  animation: fadeIn 0.2s ease;
+  transform: translate(-50%, -50%);
+  overflow: hidden;
+  font-size: 12px;
+  animation: fadeIn 0.15s ease;
 }
 
-.settings-panel {
-  width: 280px;
-  background: var(--bg-primary);
-  border-radius: var(--radius);
-  border: 1px solid var(--border-color);
-  box-shadow: var(--shadow);
-  animation: slideUp 0.3s ease;
+.settings-panel.is-dragging {
+  transition: none !important;
+  opacity: 0.85;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 
 .panel-header {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--border-color);
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(137, 180, 250, 0.15);
+  cursor: grab;
+  user-select: none;
 }
 
 .panel-header h3 {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
+  color: #ccc;
+  margin: 0;
 }
 
 .close-btn {
-  width: 24px;
-  height: 24px;
-  border: none;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
+  width: 20px; height: 20px;
+  border: none; border-radius: 4px;
+  background: transparent; color: #666;
+  cursor: pointer; font-size: 11px;
 }
 
 .close-btn:hover {
-  background: var(--bg-button);
+  background: rgba(255,255,255,0.1);
+  color: #fff;
 }
 
 .panel-body {
-  padding: 12px 16px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 8px;
 }
 
-.setting-item {
+.setting-row {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+  gap: 8px;
 }
 
-.setting-item label {
+.setting-row label {
+  width: 32px;
   font-size: 11px;
-  color: var(--text-secondary);
+  color: #999;
+  flex-shrink: 0;
 }
 
 .setting-input {
-  width: 100%;
-  padding: 6px 10px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  background: var(--bg-card);
-  color: var(--text-primary);
-  font-size: 13px;
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid rgba(137, 180, 250, 0.2);
+  border-radius: 4px;
+  background: rgba(0,0,0,0.3);
+  color: #ddd;
+  font-size: 12px;
   outline: none;
-  transition: border-color 0.2s;
 }
 
 .setting-input:focus {
-  border-color: var(--accent-blue);
+  border-color: #89b4fa;
 }
 
-.preview-info {
+.preview-row {
   display: flex;
   justify-content: space-between;
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.preview-value {
-  color: var(--accent-blue);
-  font-weight: 500;
-}
-
-.btn-change-image {
-  padding: 6px 12px;
-  border: 1px dashed var(--border-color);
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 12px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-change-image:hover {
-  border-color: var(--accent-blue);
-  color: var(--accent-blue);
-  background: rgba(137, 180, 250, 0.1);
-}
-
-.image-preview {
-  position: relative;
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  overflow: hidden;
-  border: 1px solid var(--border-color);
-}
-
-.image-preview img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.btn-remove-image {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 18px;
-  height: 18px;
-  border: none;
-  border-radius: 50%;
-  background: var(--accent-red);
-  color: white;
   font-size: 10px;
+  color: #888;
+}
+
+.preview-row b {
+  color: #89b4fa;
+  font-weight: 600;
+}
+
+.btn-image {
+  padding: 3px 8px;
+  border: 1px dashed rgba(137, 180, 250, 0.3);
+  border-radius: 4px;
+  background: transparent;
+  color: #999;
+  font-size: 11px;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+}
+
+.btn-image:hover {
+  border-color: #89b4fa;
+  color: #89b4fa;
+}
+
+.pet-preview {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(137, 180, 250, 0.3);
+}
+
+.btn-remove {
+  width: 16px; height: 16px;
+  border: none; border-radius: 50%;
+  background: #e74c3c; color: #fff;
+  font-size: 8px; cursor: pointer;
+  line-height: 16px; text-align: center;
 }
 
 .panel-footer {
-  padding: 12px 16px;
-  border-top: 1px solid var(--border-color);
+  padding: 8px 12px;
+  border-top: 1px solid rgba(137, 180, 250, 0.15);
 }
 
 .btn-save {
   width: 100%;
-  padding: 8px;
+  padding: 5px;
   border: none;
-  border-radius: 6px;
-  background: var(--accent-blue);
+  border-radius: 4px;
+  background: #89b4fa;
   color: #1e1e2e;
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
 }
 
 .btn-save:hover {
   opacity: 0.9;
-  transform: translateY(-1px);
 }
 </style>

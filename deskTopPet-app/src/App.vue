@@ -1,20 +1,14 @@
 <template>
   <div class="app-container">
-    <!-- 牛牛头像 -->
-    <PetAvatar
-      @dblclick="toggleMenu"
-    />
+    <PetAvatar @dblclick="toggleMenu" />
 
-    <!-- 径向菜单 -->
     <RadialMenu
       v-if="showMenu"
-      :x="250"
-      :y="250"
+      :x="250" :y="250"
       @close="showMenu = false"
       @select="handleMenuSelect"
     />
 
-    <!-- 侧边面板 -->
     <SidePanel
       v-if="showPanel"
       :type="panelType"
@@ -22,10 +16,8 @@
       @close="showPanel = false"
     />
 
-    <!-- 弹球游戏 -->
     <PongGameWrapper v-if="showPongGame" @close="showPongGame = false" />
-
-    <!-- 弹窗 -->
+    <NovelPanel v-if="showNovel" @close="showNovel = false" />
     <SettingsPanel v-if="showSettings" @close="showSettings = false" />
     <DailyReport v-if="showReport" :session="reportSession" @close="showReport = false" />
   </div>
@@ -39,6 +31,7 @@ import SidePanel from './components/SidePanel.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
 import DailyReport from './components/DailyReport.vue'
 import PongGameWrapper from './components/PongGameWrapper.vue'
+import NovelPanel from './components/NovelPanel.vue'
 import type { WorkSession } from './types'
 import {
   updateBackendAlphaMask,
@@ -54,6 +47,7 @@ const panelType = ref<'wage' | 'control' | null>(null)
 const showSettings = ref(false)
 const showReport = ref(false)
 const showPongGame = ref(false)
+const showNovel = ref(false)
 const reportSession = ref<WorkSession | null>(null)
 const selectedMenuIndex = ref(0)
 
@@ -61,31 +55,24 @@ const selectedMenuIndex = ref(0)
 function updateAlphaMask() {
   let elements
 
-  if (showSettings.value || showReport.value || showPongGame.value) {
-    // 全屏弹窗：整个窗口可点击
+  if (showSettings.value || showReport.value || showPongGame.value || showNovel.value) {
     elements = getFullscreenElements()
   } else if (showPanel.value) {
-    // 侧边面板展开
     elements = getPanelElements(selectedMenuIndex.value)
   } else if (showMenu.value) {
-    // 菜单展开
     elements = getMenuElements()
   } else {
-    // 只有牛牛
     elements = getDefaultElements()
   }
 
   updateBackendAlphaMask(elements).catch(console.error)
 }
 
-// 监听 UI 变化，更新遮罩
-watch([showMenu, showPanel, showSettings, showReport, showPongGame, selectedMenuIndex], () => {
+watch([showMenu, showPanel, showSettings, showReport, showPongGame, showNovel, selectedMenuIndex], () => {
   updateAlphaMask()
 })
 
-// 初始化时更新遮罩
 onMounted(() => {
-  // 延迟一下，确保后端线程已启动
   setTimeout(updateAlphaMask, 600)
 })
 
@@ -103,7 +90,7 @@ function toggleMenu() {
 function handleMenuSelect(action: string) {
   const actionToIndex: Record<string, number> = {
     'clockin': 0,
-    'slacking': 1,
+    'novel': 1,
     'wage': 2,
     'pong': 3,
     'settings': 4,
@@ -113,7 +100,6 @@ function handleMenuSelect(action: string) {
 
   switch (action) {
     case 'clockin':
-    case 'slacking':
       panelType.value = 'control'
       showPanel.value = true
       break
@@ -123,6 +109,10 @@ function handleMenuSelect(action: string) {
       break
     case 'pong':
       showPongGame.value = true
+      showMenu.value = false
+      break
+    case 'novel':
+      showNovel.value = true
       showMenu.value = false
       break
     case 'settings':

@@ -39,10 +39,10 @@ const emit = defineEmits<{
   select: [action: string]
 }>()
 
-// 6个菜单项：打卡、摸鱼、工资、弹球、设置、日报
+// 6个菜单项：打卡、小说、工资、弹球、设置、日报
 const menuItems: MenuItem[] = [
   { icon: '💼', label: '打卡', action: 'clockin' },
-  { icon: '🐟', label: '摸鱼', action: 'slacking' },
+  { icon: '📖', label: '小说', action: 'novel' },
   { icon: '💰', label: '工资', action: 'wage' },
   { icon: '🎮', label: '弹球', action: 'pong' },
   { icon: '⚙️', label: '设置', action: 'settings' },
