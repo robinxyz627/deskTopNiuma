@@ -77,7 +77,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { useWageStore } from '@/stores/wageStore'
 import { useDraggable } from '@/composables/useDraggable'
 
@@ -88,18 +88,23 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   close: []
+  move: [x: number, y: number]
 }>()
 
 const wageStore = useWageStore()
 
-// 根据菜单索引计算初始位置
 const menuRadius = 85
 const panelOffset = 80
 const angle = computed(() => (props.menuIndex * 60 - 90) * (Math.PI / 180))
 const initPanelX = computed(() => 250 + Math.cos(angle.value) * (menuRadius + panelOffset))
 const initPanelY = computed(() => 250 + Math.sin(angle.value) * (menuRadius + panelOffset))
 
-const { x, y, isDragging, onHeaderMouseDown } = useDraggable(initPanelX.value, initPanelY.value)
+const { x, y, isDragging, onHeaderMouseDown } = useDraggable(
+  initPanelX.value,
+  initPanelY.value,
+  undefined,
+  (px, py) => emit('move', px, py)
+)
 
 const panelStyle = computed(() => ({
   left: `${x.value}px`,

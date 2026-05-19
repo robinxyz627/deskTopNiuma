@@ -1,13 +1,6 @@
 import { ref, type Ref } from 'vue'
 
-/**
- * 面板拖拽 Composable
- * 用于在 500x500 窗口内拖动任意面板
- * @param initialX - 初始 X 位置（相对于窗口左上角）
- * @param initialY - 初始 Y 位置（相对于窗口左上角）
- * @param elRef - 面板根元素 ref（用于设置 dragTarget）
- */
-export function useDraggable(initialX: number, initialY: number, elRef?: Ref<HTMLElement | null>) {
+export function useDraggable(initialX: number, initialY: number, _elRef?: Ref<HTMLElement | null>, onMove?: (x: number, y: number) => void) {
   const x = ref(initialX)
   const y = ref(initialY)
   const isDragging = ref(false)
@@ -36,9 +29,10 @@ export function useDraggable(initialX: number, initialY: number, elRef?: Ref<HTM
     const dx = e.clientX - startMouseX
     const dy = e.clientY - startMouseY
 
-    // 限制在窗口内（500x500），留边距
     x.value = Math.max(10, Math.min(490, startX + dx))
     y.value = Math.max(10, Math.min(490, startY + dy))
+
+    onMove?.(x.value, y.value)
   }
 
   function onMouseUp() {

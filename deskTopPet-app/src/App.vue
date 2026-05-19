@@ -14,6 +14,7 @@
       :type="panelType"
       :menuIndex="selectedMenuIndex"
       @close="showPanel = false"
+      @move="onPanelMove"
     />
 
     <PongGameWrapper v-if="showPongGame" @close="showPongGame = false" />
@@ -51,14 +52,22 @@ const showNovel = ref(false)
 const reportSession = ref<WorkSession | null>(null)
 const selectedMenuIndex = ref(0)
 
-// 更新透明遮罩
+const panelPosX = ref<number | undefined>(undefined)
+const panelPosY = ref<number | undefined>(undefined)
+
+function onPanelMove(x: number, y: number) {
+  panelPosX.value = x
+  panelPosY.value = y
+  updateAlphaMask()
+}
+
 function updateAlphaMask() {
   let elements
 
   if (showSettings.value || showReport.value || showPongGame.value || showNovel.value) {
     elements = getFullscreenElements()
   } else if (showPanel.value) {
-    elements = getPanelElements(selectedMenuIndex.value)
+    elements = getPanelElements(selectedMenuIndex.value, panelPosX.value, panelPosY.value)
   } else if (showMenu.value) {
     elements = getMenuElements()
   } else {
@@ -69,6 +78,10 @@ function updateAlphaMask() {
 }
 
 watch([showMenu, showPanel, showSettings, showReport, showPongGame, showNovel, selectedMenuIndex], () => {
+  if (showPanel.value) {
+    panelPosX.value = undefined
+    panelPosY.value = undefined
+  }
   updateAlphaMask()
 })
 
@@ -76,17 +89,17 @@ onMounted(() => {
   setTimeout(updateAlphaMask, 600)
 })
 
-// 切换菜单
 function toggleMenu() {
   if (showMenu.value) {
     showMenu.value = false
     showPanel.value = false
+    panelPosX.value = undefined
+    panelPosY.value = undefined
   } else {
     showMenu.value = true
   }
 }
 
-// 菜单选择
 function handleMenuSelect(action: string) {
   const actionToIndex: Record<string, number> = {
     'clockin': 0,
@@ -97,6 +110,8 @@ function handleMenuSelect(action: string) {
     'report': 5,
   }
   selectedMenuIndex.value = actionToIndex[action] ?? 0
+  panelPosX.value = undefined
+  panelPosY.value = undefined
 
   switch (action) {
     case 'clockin':

@@ -33,10 +33,9 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { invoke } from '@tauri-apps/api/core'
 import { useDraggable } from '@/composables/useDraggable'
 
-const emit = defineEmits<{ close: [] }>()
+defineEmits<{ close: [] }>()
 
 const content = ref('')
 const fontSize = ref(14)

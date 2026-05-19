@@ -1,7 +1,7 @@
 <template>
-  <div class="pong-wrapper" @mousemove="handleMouseMove" @click="handleClick">
+  <div class="pong-wrapper" @click="handleClick">
     <!-- 标题栏 -->
-    <div class="game-header" @mousedown="startDragWindow">
+    <div class="game-header" @mousedown="startDragWindow" @click.stop>
       <span class="game-title">🎮 摸鱼弹球</span>
       <div class="game-controls">
         <button class="control-btn" @click.stop="minimizeWindow" title="最小化">─</button>
@@ -57,7 +57,7 @@
       </div>
 
       <!-- Canvas 游戏区域 -->
-      <div class="canvas-wrapper">
+      <div class="canvas-wrapper" @mousemove="handleMouseMove">
         <canvas
           ref="gameCanvas"
           class="game-canvas"
@@ -101,15 +101,19 @@
 <script setup lang="ts">
 import { ref, nextTick, onMounted, onUnmounted } from 'vue'
 import { PongGameCore } from '../pong-game/PongGameCore'
+import { invoke } from '@tauri-apps/api/core'
 
 const emit = defineEmits<{ close: [] }>()
 
-// 窗口/标题栏控制
 async function startDragWindow() {
   try {
+    invoke('set_window_dragging', { dragging: true })
     const { getCurrentWindow } = await import('@tauri-apps/api/window')
     await getCurrentWindow().startDragging()
-  } catch { /* 非Tauri环境忽略 */ }
+    invoke('set_window_dragging', { dragging: false })
+  } catch {
+    invoke('set_window_dragging', { dragging: false })
+  }
 }
 
 async function minimizeWindow() {
@@ -258,8 +262,8 @@ function cleanup() {
 // ---- 输入控制 ----
 
 function handleClick(e: MouseEvent) {
-  if (e.button !== 0) return // 只响应左键
-  // 如果是在发球状态，尝试发球
+  if (e.button !== 0) return
+  if (!gameStarted.value) return
   if (gameCore) {
     gameCore.serveBall()
   }

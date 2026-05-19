@@ -1,11 +1,15 @@
-use tauri::Manager;
+use tauri::{
+    Manager,
+    menu::{MenuBuilder, MenuItem},
+    tray::{TrayIconBuilder, TrayIconEvent},
+    image::Image,
+};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use std::sync::RwLock;
 
-// 拖动状态
 struct DragState {
     window_x: f64,
     window_y: f64,
@@ -13,12 +17,9 @@ struct DragState {
     mouse_y: f64,
 }
 
-// 透明遮罩缓存
 struct AlphaMask {
     width: u32,
     height: u32,
-    // 每个像素一个字节，存储 Alpha 值
-    // 索引计算: y * width + x
     data: Vec<u8>,
 }
 
@@ -46,7 +47,6 @@ impl AlphaMask {
         }
         let index = (y * self.width + x) as usize;
         if index < self.data.len() {
-            // Alpha < 128 视为透明
             self.data[index] < 128
         } else {
             true
@@ -54,15 +54,16 @@ impl AlphaMask {
     }
 }
 
-// 像素检测状态
 struct PixelMonitorState {
     running: AtomicBool,
+    is_window_dragging: AtomicBool,
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let monitor_state = Arc::new(PixelMonitorState {
         running: AtomicBool::new(false),
+        is_window_dragging: AtomicBool::new(false),
     });
     let alpha_mask = Arc::new(RwLock::new(AlphaMask::new()));
 
@@ -84,29 +85,72 @@ pub fn run() {
             drag_to,
             start_pixel_monitor,
             stop_pixel_monitor,
-            update_alpha_mask
+            update_alpha_mask,
+            set_window_dragging
         ])
         .setup(move |app| {
             let window = app.get_webview_window("main").unwrap();
 
-            // 设置窗口置顶
             window.set_always_on_top(true).unwrap();
-
-            // 初始状态：不穿透，让窗口接收事件
             window.set_ignore_cursor_events(false).unwrap();
-
-            // 显示窗口
             window.show().unwrap();
 
-            // 启动像素监控线程
+            let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+            let separator_item = MenuItem::with_id(app, "sep1", "", true, None::<&str>)?;
+            let feedback_item = MenuItem::with_id(app, "feedback", "意见反馈", true, None::<&str>)?;
+            let update_item = MenuItem::with_id(app, "update", "检查更新", true, None::<&str>)?;
+            let separator_item2 = MenuItem::with_id(app, "sep2", "", true, None::<&str>)?;
+            let version_item = MenuItem::with_id(app, "version", "v1.0.0", false, None::<&str>)?;
+
+            let menu = MenuBuilder::new(app).items(&[
+                &quit_item,
+                &separator_item,
+                &feedback_item,
+                &update_item,
+                &separator_item2,
+                &version_item,
+            ]).build()?;
+
+            let _tray = TrayIconBuilder::new()
+                .icon(
+                    app.default_window_icon().cloned().unwrap_or_else(|| {
+                        Image::from_bytes(include_bytes!("../icons/fish.ico"))
+                            .expect("failed to load tray icon")
+                    })
+                )
+                .tooltip("牛马工资计算器")
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(move |app, event| {
+                    match event.id().0.as_str() {
+                        "quit" => { app.exit(0); }
+                        "feedback" => {}
+                        "update" => {}
+                        _ => {}
+                    }
+                })
+                .on_tray_icon_event(|tray, event| {
+                    match &event {
+                        TrayIconEvent::Click { button, .. } => {
+                            if button == &tauri::tray::MouseButton::Left {
+                                let app = tray.app_handle();
+                                if let Some(w) = app.get_webview_window("main") {
+                                    let _ = w.show();
+                                    let _ = w.set_focus();
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                })
+                .build(app)?;
+
             let window_clone = window.clone();
             let monitor_state_clone = monitor_state.clone();
             let alpha_mask_for_thread = alpha_mask_clone.clone();
 
             thread::spawn(move || {
-                // 等待窗口完全初始化
                 thread::sleep(Duration::from_millis(500));
-
                 start_pixel_detection(window_clone, monitor_state_clone, alpha_mask_for_thread);
             });
 
@@ -116,9 +160,6 @@ pub fn run() {
         .expect("error while running tauri application");
 }
 
-/// 启动像素检测线程
-/// 持续监控鼠标位置，查表判断透明度
-/// 采样频率：约 30ms (约 33 FPS)
 fn start_pixel_detection(
     window: tauri::WebviewWindow,
     state: Arc<PixelMonitorState>,
@@ -126,11 +167,15 @@ fn start_pixel_detection(
 ) {
     state.running.store(true, Ordering::Relaxed);
 
-    // 获取窗口的 scale factor (DPI 缩放)
     let scale_factor = window.scale_factor().unwrap_or(1.0);
 
     while state.running.load(Ordering::Relaxed) {
-        // 获取鼠标屏幕坐标
+        if state.is_window_dragging.load(Ordering::Relaxed) {
+            let _ = window.set_ignore_cursor_events(false);
+            thread::sleep(Duration::from_millis(30));
+            continue;
+        }
+
         let mouse_pos = match window.cursor_position() {
             Ok(pos) => pos,
             Err(_) => {
@@ -139,7 +184,6 @@ fn start_pixel_detection(
             }
         };
 
-        // 获取窗口位置
         let window_pos = match window.outer_position() {
             Ok(pos) => pos,
             Err(_) => {
@@ -148,11 +192,9 @@ fn start_pixel_detection(
             }
         };
 
-        // 计算鼠标相对于窗口的坐标（考虑 DPI 缩放）
         let rel_x = ((mouse_pos.x as f64) - (window_pos.x as f64)) / scale_factor;
         let rel_y = ((mouse_pos.y as f64) - (window_pos.y as f64)) / scale_factor;
 
-        // 获取窗口大小
         let size = match window.inner_size() {
             Ok(s) => s,
             Err(_) => {
@@ -164,33 +206,25 @@ fn start_pixel_detection(
         let width = size.width as f64 / scale_factor;
         let height = size.height as f64 / scale_factor;
 
-        // 检查鼠标是否在窗口范围内
         if rel_x >= 0.0 && rel_x < width && rel_y >= 0.0 && rel_y < height {
-            // 查表判断透明度
             let is_transparent = {
                 let mask = alpha_mask.read().unwrap();
                 mask.is_transparent(rel_x as u32, rel_y as u32)
             };
 
-            // 根据透明度设置穿透状态
             if is_transparent {
-                // 透明区域 -> 穿透
                 let _ = window.set_ignore_cursor_events(true);
             } else {
-                // 非透明区域 -> 可点击
                 let _ = window.set_ignore_cursor_events(false);
             }
         } else {
-            // 鼠标在窗口外 -> 穿透
             let _ = window.set_ignore_cursor_events(true);
         }
 
-        // 采样间隔：30ms (约 33 FPS)
         thread::sleep(Duration::from_millis(30));
     }
 }
 
-// 记录拖动起始状态
 #[tauri::command]
 fn start_drag(
     window: tauri::WebviewWindow,
@@ -199,16 +233,16 @@ fn start_drag(
     mouse_y: f64,
 ) {
     if let Ok(pos) = window.outer_position() {
+        let scale_factor = window.scale_factor().unwrap_or(1.0);
         if let Ok(mut s) = state.lock() {
-            s.window_x = pos.x as f64;
-            s.window_y = pos.y as f64;
+            s.window_x = pos.x as f64 / scale_factor;
+            s.window_y = pos.y as f64 / scale_factor;
             s.mouse_x = mouse_x;
             s.mouse_y = mouse_y;
         }
     }
 }
 
-// 移动窗口
 #[tauri::command]
 fn drag_to(
     window: tauri::WebviewWindow,
@@ -229,19 +263,14 @@ fn drag_to(
     }
 }
 
-// 启动像素监控（命令接口，实际已在 setup 中启动）
 #[tauri::command]
-fn start_pixel_monitor() {
-    // 监控线程已在 setup 中启动
-}
+fn start_pixel_monitor() {}
 
-// 停止像素监控
 #[tauri::command]
 fn stop_pixel_monitor(state: tauri::State<'_, Arc<PixelMonitorState>>) {
     state.running.store(false, Ordering::Relaxed);
 }
 
-// 更新透明遮罩缓存
 #[tauri::command]
 fn update_alpha_mask(
     alpha_mask: tauri::State<'_, Arc<RwLock<AlphaMask>>>,
@@ -251,4 +280,9 @@ fn update_alpha_mask(
 ) {
     let mut mask = alpha_mask.write().unwrap();
     mask.update(width, height, data);
+}
+
+#[tauri::command]
+fn set_window_dragging(state: tauri::State<'_, Arc<PixelMonitorState>>, dragging: bool) {
+    state.is_window_dragging.store(dragging, Ordering::Relaxed);
 }

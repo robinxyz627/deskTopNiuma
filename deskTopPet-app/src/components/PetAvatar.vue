@@ -19,7 +19,6 @@
         <span class="placeholder-text">🐂</span>
       </div>
     </div>
-    <!-- 摸鱼动画 -->
     <div v-if="wageStore.isSlacking" class="slacking-indicator">
       <span class="zzz">Zzz</span>
     </div>
@@ -36,7 +35,6 @@ const { settings } = useSettings()
 const wageStore = useWageStore()
 const petImage = ref('')
 
-// 拖动状态
 const isMouseDown = ref(false)
 const isDragging = ref(false)
 const dragStartPos = ref({ x: 0, y: 0 })
@@ -57,26 +55,20 @@ onUnmounted(() => {
   document.removeEventListener('mouseup', onGlobalMouseUp)
 })
 
-function onClick(e: MouseEvent) {
-  console.log('CLICK event fired!', e)
-}
+function onClick(_e: MouseEvent) {}
 
 function onDblClick(e: MouseEvent) {
-  console.log('DBLCLICK event fired!', e)
   emit('dblclick', e)
 }
 
 function onMouseDown(e: MouseEvent) {
-  console.log('MOUSEDOWN event fired!', e.button, e.screenX, e.screenY)
   if (e.button !== 0) return
   isMouseDown.value = true
   isDragging.value = false
   dragStartPos.value = { x: e.screenX, y: e.screenY }
 }
 
-function onMouseUp(e: MouseEvent) {
-  console.log('MOUSEUP event fired!', e)
-}
+function onMouseUp(_e: MouseEvent) {}
 
 function onGlobalMouseMove(e: MouseEvent) {
   if (!isMouseDown.value) return
@@ -90,6 +82,7 @@ function onGlobalMouseMove(e: MouseEvent) {
 
   if (!isDragging.value) {
     isDragging.value = true
+    invoke('set_window_dragging', { dragging: true })
     invoke('start_drag', {
       mouseX: dragStartPos.value.x,
       mouseY: dragStartPos.value.y
@@ -100,13 +93,14 @@ function onGlobalMouseMove(e: MouseEvent) {
 }
 
 function onGlobalMouseUp() {
+  if (isDragging.value) {
+    invoke('set_window_dragging', { dragging: false })
+  }
   isMouseDown.value = false
   isDragging.value = false
 }
 
-function onMouseMove(_e: MouseEvent) {
-  // 空实现
-}
+function onMouseMove(_e: MouseEvent) {}
 </script>
 
 <style scoped>
